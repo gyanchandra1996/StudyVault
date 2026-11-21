@@ -1,24 +1,37 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 
 export default function TabLayout() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  // Dynamic bottom padding: handles Android 3-button nav, Android gesture bar, and iOS home indicator
+  const bottomInset = insets.bottom;
+  const paddingBottom =
+    bottomInset > 0
+      ? bottomInset + (Platform.OS === 'android' ? 6 : 2)
+      : Platform.OS === 'ios'
+      ? 20
+      : 8;
+  const tabBarHeight = 56 + paddingBottom;
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.bottomBarInactive,
         tabBarStyle: {
           backgroundColor: colors.bottomBarBg,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          height: tabBarHeight,
+          paddingBottom: paddingBottom,
           paddingTop: 8,
           elevation: 8,
           shadowColor: colors.shadow,
@@ -29,6 +42,7 @@ export default function TabLayout() {
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
+          marginTop: 2,
         },
       }}
     >

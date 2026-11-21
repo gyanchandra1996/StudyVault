@@ -14,7 +14,7 @@
     "android": {
       "package": "com.studyvault.app",
       "adaptiveIcon": {
-        "backgroundColor": "#1E1E2E",
+        "backgroundColor": "#080C18",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
