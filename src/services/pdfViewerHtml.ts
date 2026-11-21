@@ -6,7 +6,26 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
   <title>StudyVault PDF Reader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    @font-face {
+      font-family: 'Mangal';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Nirmala UI';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Kruti Dev 010';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Devlys 010';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
     * {
       box-sizing: border-box;
       -webkit-tap-highlight-color: transparent;
@@ -17,7 +36,7 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
       width: 100%;
       height: 100%;
       background-color: #F8FAFC;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Devanagari", "Mangal", "Nirmala UI", Helvetica, Arial, sans-serif;
       overflow-x: auto;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
@@ -61,14 +80,15 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
       right: 0;
       bottom: 0;
       overflow: hidden;
-      opacity: 0.25;
+      opacity: 1;
       line-height: 1.0;
       user-select: text;
       -webkit-user-select: text;
       pointer-events: auto;
+      z-index: 2;
     }
     .textLayer span {
-      color: transparent;
+      color: transparent !important;
       position: absolute;
       white-space: pre;
       cursor: text;
@@ -142,20 +162,21 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
   <script>
     // Inlined 100% offline Mozilla PDF.js engine and worker
     try {
+      // 1. Inject worker script first into global scope so globalThis.pdfjsWorker is available
+      var workerCode = atob('${PDF_WORKER_BASE64}');
+      var workerScriptTag = document.createElement('script');
+      workerScriptTag.text = workerCode;
+      document.head.appendChild(workerScriptTag);
+
+      // 2. Inject main PDF.js library
       var pdfJsCode = atob('${PDF_JS_BASE64}');
       var scriptTag = document.createElement('script');
       scriptTag.text = pdfJsCode;
       document.head.appendChild(scriptTag);
 
       if (typeof pdfjsLib !== 'undefined') {
-        try {
-          var workerCode = atob('${PDF_WORKER_BASE64}');
-          var workerBlob = new Blob([workerCode], { type: 'text/javascript' });
-          pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
-        } catch (workerErr) {
-          console.warn('Worker blob creation failed, falling back to synchronous worker:', workerErr);
-          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-        }
+        // Enable fonts and use in-memory WorkerMessageHandler
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
       }
     } catch (engineErr) {
       console.error('Failed to initialize inline pdfjsLib:', engineErr);
@@ -254,12 +275,135 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
       }
     };
 
+    function CachingCMapReaderFactory(options) {
+      this.baseUrl = (options && options.baseUrl) || 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/';
+      this.isCompressed = options ? options.isCompressed !== false : true;
+    }
+    CachingCMapReaderFactory.prototype = {
+      fetch: function(query) {
+        var name = query.name;
+        if (!name) return Promise.reject(new Error('CMap name is missing'));
+        var ext = this.isCompressed ? '.bcmap' : '';
+        var cacheKey = 'cmap_cache_' + name;
+
+        try {
+          var cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            var raw = atob(cached);
+            var uint8 = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) {
+              uint8[i] = raw.charCodeAt(i);
+            }
+            return Promise.resolve({ cMapData: uint8, isCompressed: true });
+          }
+        } catch (e) {}
+
+        var url1 = this.baseUrl + name + ext;
+        var url2 = 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/' + name + ext;
+        var url3 = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/' + name + ext;
+
+        function fetchCMap(u) {
+          return fetch(u).then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.arrayBuffer();
+          });
+        }
+
+        return fetchCMap(url1)
+          .catch(function() { return fetchCMap(url2); })
+          .catch(function() { return fetchCMap(url3); })
+          .then(function(buffer) {
+            var bytes = new Uint8Array(buffer);
+            try {
+              var binaryStr = '';
+              var chunkSize = 8192;
+              for (var j = 0; j < bytes.length; j += chunkSize) {
+                var slice = bytes.subarray(j, Math.min(j + chunkSize, bytes.length));
+                binaryStr += String.fromCharCode.apply(null, slice);
+              }
+              localStorage.setItem(cacheKey, btoa(binaryStr));
+            } catch (err) {}
+            return { cMapData: bytes, isCompressed: true };
+          })
+          .catch(function(err) {
+            console.warn('CMap fetch fallback for ' + name + ':', err);
+            return { cMapData: new Uint8Array(0), isCompressed: false };
+          });
+      }
+    };
+
+    function CachingStandardFontDataFactory(options) {
+      this.baseUrl = (options && options.baseUrl) || 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/';
+    }
+    CachingStandardFontDataFactory.prototype = {
+      fetch: function(query) {
+        var filename = query.filename;
+        if (!filename) return Promise.reject(new Error('Font filename is missing'));
+        var cacheKey = 'font_cache_' + filename;
+
+        try {
+          var cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            var raw = atob(cached);
+            var uint8 = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) {
+              uint8[i] = raw.charCodeAt(i);
+            }
+            return Promise.resolve(uint8);
+          }
+        } catch (e) {}
+
+        var url1 = this.baseUrl + filename;
+        var url2 = 'https://unpkg.com/pdfjs-dist@3.11.174/standard_fonts/' + filename;
+
+        function fetchFont(u) {
+          return fetch(u).then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.arrayBuffer();
+          });
+        }
+
+        return fetchFont(url1)
+          .catch(function() { return fetchFont(url2); })
+          .then(function(buffer) {
+            var bytes = new Uint8Array(buffer);
+            try {
+              var binaryStr = '';
+              var chunkSize = 8192;
+              for (var j = 0; j < bytes.length; j += chunkSize) {
+                var slice = bytes.subarray(j, Math.min(j + chunkSize, bytes.length));
+                binaryStr += String.fromCharCode.apply(null, slice);
+              }
+              localStorage.setItem(cacheKey, btoa(binaryStr));
+            } catch (err) {}
+            return bytes;
+          })
+          .catch(function(err) {
+            console.warn('Standard font fetch fallback for ' + filename + ':', err);
+            return new Uint8Array(0);
+          });
+      }
+    };
+
     function loadPdfFromUint8Array(uint8Array, startPage) {
       try {
+        var CMAP_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/';
+        var CMAP_PACKED = true;
+        var STANDARD_FONT_DATA_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/';
+
         var loadingTask = pdfjsLib.getDocument({
           data: uint8Array,
-          cMapUrl: 'cmaps/',
-          cMapPacked: true,
+          cMapUrl: CMAP_URL,
+          cMapPacked: CMAP_PACKED,
+          CMapReaderFactory: CachingCMapReaderFactory,
+          standardFontDataUrl: STANDARD_FONT_DATA_URL,
+          StandardFontDataFactory: CachingStandardFontDataFactory,
+          useWorkerFetch: true,
+          enableXfa: true,
+          useSystemFonts: true,
+          disableFontFace: false,
+          fontExtraProperties: true,
+          isEvalSupported: true,
         });
 
         loadingTask.promise.then(function(doc) {
@@ -389,6 +533,7 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
             textLayerDiv.innerHTML = '';
             textLayerDiv.style.width = displayWidth + 'px';
             textLayerDiv.style.height = displayHeight + 'px';
+            textLayerDiv.style.setProperty('--scale-factor', displayViewport.scale);
 
             pdfjsLib.renderTextLayer({
               textContent: textContent,

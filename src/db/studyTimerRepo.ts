@@ -68,3 +68,67 @@ export function getRecentStudySessions(limit: number = 10): StudySession[] {
     [limit]
   );
 }
+
+export function getStudyStreakDays(): number {
+  const db = getDatabase();
+  try {
+    const rows = db.getAllSync<{ day: string }>(`
+      SELECT DISTINCT substr(completed_at, 1, 10) as day
+      FROM study_sessions
+      ORDER BY day DESC
+      LIMIT 30
+    `);
+
+    if (rows.length === 0) return 0;
+
+    let streak = 0;
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toISOString().slice(0, 10);
+
+    let checkDate = rows[0].day === today ? today : rows[0].day === yesterday ? yesterday : null;
+    if (!checkDate) return 0;
+
+    const daySet = new Set(rows.map((r) => r.day));
+    const curr = new Date(checkDate);
+
+    while (true) {
+      const dStr = curr.toISOString().slice(0, 10);
+      if (daySet.has(dStr)) {
+        streak++;
+        curr.setDate(curr.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return Math.max(1, streak);
+  } catch {
+    return 1;
+  }
+}
+
+export function getStudyTrackingSummary(): {
+  todayMinutes: number;
+  totalHours: number;
+  streakDays: number;
+  totalPagesRead: number;
+} {
+  const db = getDatabase();
+  const todaySecs = getTodayStudySeconds();
+  const totalSecs = getTotalStudySeconds();
+  const streak = getStudyStreakDays();
+
+  const pagesRes = db.getFirstSync<{ total_pages: number }>(`
+    SELECT COALESCE(SUM(last_read_page), 0) as total_pages
+    FROM pdf_documents
+    WHERE is_deleted = 0
+  `);
+
+  return {
+    todayMinutes: Math.round(todaySecs / 60),
+    totalHours: Math.round((totalSecs / 3600) * 10) / 10,
+    streakDays: streak,
+    totalPagesRead: pagesRes?.total_pages ?? 0,
+  };
+}

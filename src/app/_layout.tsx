@@ -11,6 +11,10 @@ import { useThemeStore } from '@/stores/useThemeStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useTheme } from '@/hooks/useTheme';
 import { LockScreen } from '@/components/auth/LockScreen';
+import { FloatingPomodoro } from '@/components/study/FloatingPomodoro';
+import { PomodoroWidget } from '@/components/study/PomodoroWidget';
+import { usePomodoroStore } from '@/stores/usePomodoroStore';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 
 // Keep splash screen visible while loading resources
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -19,12 +23,15 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(Ionicons.font);
   const loadSavedTheme = useThemeStore((state) => state.loadSavedTheme);
   const { loadSettings, isLockEnabled, isUnlocked, isLoaded } = useAuthStore();
+  const loadAppSettings = useSettingsStore((state) => state.loadSettings);
+  const { isModalVisible, setModalVisible } = usePomodoroStore();
   const { colors, isDark } = useTheme();
 
   useEffect(() => {
     loadSavedTheme();
     loadSettings();
-  }, [loadSavedTheme, loadSettings]);
+    loadAppSettings();
+  }, [loadSavedTheme, loadSettings, loadAppSettings]);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
@@ -58,6 +65,15 @@ export default function RootLayout() {
             <Stack.Screen name="storage/index" options={{ headerShown: false }} />
             <Stack.Screen name="flashcards/index" options={{ headerShown: false }} />
           </Stack>
+
+          {/* Global Persistent Floating Pomodoro */}
+          <FloatingPomodoro />
+
+          {/* Global Pomodoro Modal */}
+          <PomodoroWidget
+            visible={isModalVisible}
+            onClose={() => setModalVisible(false)}
+          />
 
           {/* Absolute Lock Screen overlay when app is secured */}
           {isLoaded && isLockEnabled && !isUnlocked && (

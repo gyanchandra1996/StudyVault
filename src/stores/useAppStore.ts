@@ -1,11 +1,14 @@
 import { create } from 'zustand';
-import { Category, Subcategory, PdfDocument, StorageBreakdown } from '@/types/database';
+import { Category, Subcategory, PdfDocument, StorageBreakdown, Exam } from '@/types/database';
 import * as categoryRepo from '@/db/categoryRepo';
+import * as examRepo from '@/db/examRepo';
 import * as pdfRepo from '@/db/pdfRepo';
 import { copyPdfToAppStorage } from '@/services/fileStorage';
 import { createAndSaveSamplePdf } from '@/services/samplePdfService';
 
 interface AppStoreState {
+  exams: Exam[];
+  selectedExamId: number | null; // null means 'All Exams'
   categories: Category[];
   subcategoriesMap: Record<number, Subcategory[]>; // category_id -> Subcategory[]
   pdfs: PdfDocument[];
@@ -21,6 +24,8 @@ interface AppStoreState {
 
   // Actions
   loadAll: () => Promise<void>;
+  refreshExams: () => void;
+  setSelectedExamId: (examId: number | null) => void;
   refreshCategories: () => void;
   loadSubcategoriesForCategory: (categoryId: number) => void;
   refreshPdfs: () => void;
@@ -28,19 +33,39 @@ interface AppStoreState {
   setSelectedCategoryFilter: (categoryId: number | null) => void;
   setSort: (sortBy: 'name' | 'date' | 'size' | 'recent', sortOrder: 'asc' | 'desc') => void;
 
+  // Exam Actions
+  addExam: (
+    name: string,
+    code?: string,
+    description?: string,
+    icon?: string,
+    color?: string
+  ) => Promise<Exam>;
+  editExam: (
+    id: number,
+    name: string,
+    code?: string,
+    description?: string,
+    icon?: string,
+    color?: string
+  ) => Promise<void>;
+  removeExam: (id: number) => Promise<void>;
+
   // Category Actions
   addCategory: (
     name: string,
     description?: string,
     icon?: string,
-    color?: string
+    color?: string,
+    examId?: number | null
   ) => Promise<Category>;
   editCategory: (
     id: number,
     name: string,
     description?: string,
     icon?: string,
-    color?: string
+    color?: string,
+    examId?: number | null
   ) => Promise<void>;
   removeCategory: (id: number) => Promise<void>;
 
@@ -62,6 +87,7 @@ interface AppStoreState {
   renamePdf: (id: number, newTitle: string) => Promise<void>;
   movePdf: (id: number, categoryId?: number | null, subcategoryId?: number | null) => Promise<void>;
   toggleFavorite: (id: number) => Promise<void>;
+  togglePdfCompleted: (id: number, forceCompleted?: boolean) => Promise<boolean>;
   deletePdfToBin: (id: number) => Promise<void>;
   restorePdfFromBin: (id: number) => Promise<void>;
   deletePdfPermanently: (id: number) => Promise<void>;
@@ -69,6 +95,8 @@ interface AppStoreState {
 }
 
 export const useAppStore = create<AppStoreState>((set, get) => ({
+  exams: [],
+  selectedExamId: null,
   categories: [],
   subcategoriesMap: {},
   pdfs: [],
@@ -85,14 +113,46 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   loadAll: async () => {
     set({ isLoading: true });
     try {
-      get().refreshCategories();
-      get().refreshPdfs();
-      get().refreshStorageBreakdown();
+      try { get().refreshExams(); } catch (e) { console.warn('refreshExams err:', e); }
+      try { get().refreshCategories(); } catch (e) { console.warn('refreshCategories err:', e); }
+      try { get().refreshPdfs(); } catch (e) { console.warn('refreshPdfs err:', e); }
+      try { get().refreshStorageBreakdown(); } catch (e) { console.warn('refreshStorageBreakdown err:', e); }
     } catch (e) {
       console.warn('Error loading initial app data:', e);
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  refreshExams: () => {
+    const exams = examRepo.getAllExams();
+    set({ exams });
+  },
+
+  setSelectedExamId: (examId: number | null) => {
+    set({ selectedExamId: examId });
+  },
+
+  addExam: async (name, code, description, icon, color) => {
+    const created = examRepo.createExam(name, code, description, icon, color);
+    get().refreshExams();
+    return created;
+  },
+
+  editExam: async (id, name, code, description, icon, color) => {
+    examRepo.updateExam(id, name, code, description, icon, color);
+    get().refreshExams();
+    get().refreshCategories();
+  },
+
+  removeExam: async (id) => {
+    examRepo.deleteExam(id);
+    const { selectedExamId } = get();
+    if (selectedExamId === id) {
+      set({ selectedExamId: null });
+    }
+    get().refreshExams();
+    get().refreshCategories();
   },
 
   refreshCategories: () => {
@@ -140,15 +200,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     get().refreshPdfs();
   },
 
-  addCategory: async (name, description, icon, color) => {
-    const created = categoryRepo.createCategory(name, description, icon, color);
+  addCategory: async (name, description, icon, color, examId) => {
+    const created = categoryRepo.createCategory(name, description, icon, color, examId);
     get().refreshCategories();
     get().refreshStorageBreakdown();
     return created;
   },
 
-  editCategory: async (id, name, description, icon, color) => {
-    categoryRepo.updateCategory(id, name, description, icon, color);
+  editCategory: async (id, name, description, icon, color, examId) => {
+    categoryRepo.updateCategory(id, name, description, icon, color, examId);
     get().refreshCategories();
     get().refreshPdfs();
   },
@@ -261,6 +321,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   toggleFavorite: async (id) => {
     pdfRepo.toggleFavorite(id);
     get().refreshPdfs();
+  },
+
+  togglePdfCompleted: async (id, forceCompleted) => {
+    const isCompleted = pdfRepo.togglePdfCompleted(id, forceCompleted);
+    get().refreshPdfs();
+    return isCompleted;
   },
 
   deletePdfToBin: async (id) => {

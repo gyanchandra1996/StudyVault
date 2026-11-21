@@ -1,5 +1,17 @@
 export type ColorThemeMode = 'light' | 'dark' | 'system';
-export type AccentColorKey = 'indigo' | 'blue' | 'teal' | 'emerald' | 'rose' | 'amber';
+export type AccentColorKey =
+  | 'indigo'
+  | 'blue'
+  | 'teal'
+  | 'emerald'
+  | 'rose'
+  | 'amber'
+  | 'purple'
+  | 'orange'
+  | 'cyan'
+  | 'ruby'
+  | 'forest'
+  | 'gold';
 
 export const ACCENT_PALETTES: Record<AccentColorKey, { name: string; primary: string; light: string; dark: string }> = {
   indigo: {
@@ -37,6 +49,42 @@ export const ACCENT_PALETTES: Record<AccentColorKey, { name: string; primary: st
     primary: '#D97706',
     light: '#FFFBEB',
     dark: '#B45309',
+  },
+  purple: {
+    name: 'Violet Dream',
+    primary: '#8B5CF6',
+    light: '#F5F3FF',
+    dark: '#6D28D9',
+  },
+  orange: {
+    name: 'Sunset Orange',
+    primary: '#F97316',
+    light: '#FFF7ED',
+    dark: '#C2410C',
+  },
+  cyan: {
+    name: 'Electric Cyan',
+    primary: '#06B6D4',
+    light: '#ECFEFF',
+    dark: '#0E7490',
+  },
+  ruby: {
+    name: 'Crimson Ruby',
+    primary: '#DC2626',
+    light: '#FEF2F2',
+    dark: '#991B1B',
+  },
+  forest: {
+    name: 'Forest Olive',
+    primary: '#15803D',
+    light: '#F0FDF4',
+    dark: '#166534',
+  },
+  gold: {
+    name: 'Royal Gold',
+    primary: '#CA8A04',
+    light: '#FEFCE8',
+    dark: '#854D0E',
   },
 };
 

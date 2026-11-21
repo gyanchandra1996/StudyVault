@@ -1,11 +1,26 @@
+export interface Exam {
+  id: number;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  icon: string;
+  color: string;
+  created_at: string;
+  category_count?: number;
+  question_count?: number;
+}
+
 export interface Category {
   id: number;
+  exam_id?: number | null;
   name: string;
   description?: string | null;
   icon: string;
   color: string;
   created_at: string;
   pdf_count?: number;
+  exam_name?: string;
+  exam_color?: string;
 }
 
 export interface Subcategory {
@@ -28,6 +43,8 @@ export interface PdfDocument {
   file_size: number;
   page_count: number;
   is_favorite: number; // 0 or 1
+  is_completed?: number; // 0 = in progress / unread, 1 = completed
+  completed_at?: string | null;
   last_read_page: number;
   last_opened_at?: string | null;
   created_at: string;
@@ -150,4 +167,57 @@ export interface Scratchpad {
   pdf_id: number;
   content: string;
   updated_at: string;
+}
+
+export type QuizOptionKey = 'A' | 'B' | 'C' | 'D';
+
+export interface QuizQuestion {
+  id: number;
+  exam_id?: number | null;
+  category_id?: number | null;
+  subcategory_id?: number | null;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: QuizOptionKey;
+  explanation?: string | null;
+  difficulty: 'easy' | 'medium' | 'hard';
+  created_at: string;
+  // Joined fields
+  exam_name?: string;
+  category_name?: string;
+}
+
+export interface QuizAttempt {
+  id: number;
+  exam_id?: number | null;
+  category_id?: number | null;
+  title: string;
+  total_questions: number;
+  correct_count: number;
+  wrong_count: number;
+  skipped_count: number;
+  score_percentage: number;
+  time_spent_seconds: number;
+  completed_at: string;
+  // Joined fields
+  exam_name?: string;
+  category_name?: string;
+}
+
+export interface QuizAttemptAnswer {
+  id: number;
+  attempt_id: number;
+  question_id: number;
+  selected_option?: QuizOptionKey | null;
+  is_correct: number; // 0 or 1
+  question_text?: string;
+  option_a?: string;
+  option_b?: string;
+  option_c?: string;
+  option_d?: string;
+  correct_option?: QuizOptionKey;
+  explanation?: string | null;
 }

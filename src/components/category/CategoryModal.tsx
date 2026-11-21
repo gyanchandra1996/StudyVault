@@ -10,8 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Category } from '@/types/database';
+import { Category, Exam } from '@/types/database';
 import { useTheme } from '@/hooks/useTheme';
 import { TYPOGRAPHY } from '@/theme/typography';
 
@@ -37,35 +38,56 @@ const AVAILABLE_ICONS = [
 const AVAILABLE_COLORS = [
   '#6366F1', // Indigo
   '#2563EB', // Blue
+  '#0284C7', // Sky Blue
+  '#0891B2', // Cyan
   '#0D9488', // Teal
   '#059669', // Emerald
+  '#10B981', // Mint Green
+  '#16A34A', // Forest Green
+  '#65A30D', // Lime Olive
+  '#CA8A04', // Gold
   '#D97706', // Amber
+  '#EA580C', // Sunset Orange
+  '#DC2626', // Crimson Red
   '#E11D48', // Rose
-  '#8B5CF6', // Purple
   '#EC4899', // Pink
+  '#DB2777', // Fuchsia
+  '#8B5CF6', // Purple
+  '#7C3AED', // Deep Violet
   '#475569', // Slate
-  '#0284C7', // Sky
 ];
 
 interface CategoryModalProps {
   visible: boolean;
   category?: Category | null;
-  onSave: (name: string, description?: string, icon?: string, color?: string) => void;
+  exams?: Exam[];
+  initialExamId?: number | null;
+  onSave: (
+    name: string,
+    description?: string,
+    icon?: string,
+    color?: string,
+    examId?: number | null
+  ) => void;
   onClose: () => void;
 }
 
 export function CategoryModal({
   visible,
   category,
+  exams = [],
+  initialExamId,
   onSave,
   onClose,
 }: CategoryModalProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('folder-outline');
   const [selectedColor, setSelectedColor] = useState('#6366F1');
+  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -74,21 +96,23 @@ export function CategoryModal({
       setDescription(category.description || '');
       setSelectedIcon(category.icon || 'folder-outline');
       setSelectedColor(category.color || '#6366F1');
+      setSelectedExamId(category.exam_id ?? null);
     } else {
       setName('');
       setDescription('');
       setSelectedIcon('folder-outline');
       setSelectedColor('#6366F1');
+      setSelectedExamId(initialExamId ?? null);
     }
     setError('');
-  }, [category, visible]);
+  }, [category, visible, initialExamId]);
 
   const handleSave = () => {
     if (!name.trim()) {
       setError('Category name is required');
       return;
     }
-    onSave(name.trim(), description.trim() || undefined, selectedIcon, selectedColor);
+    onSave(name.trim(), description.trim() || undefined, selectedIcon, selectedColor, selectedExamId);
     onClose();
   };
 
@@ -109,6 +133,60 @@ export function CategoryModal({
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            {exams.length > 0 && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={[TYPOGRAPHY.captionBold, { color: colors.textSecondary, marginBottom: 6 }]}>
+                  ASSIGN TO TARGET EXAM
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  <Pressable
+                    onPress={() => setSelectedExamId(null)}
+                    style={[
+                      styles.examChip,
+                      {
+                        backgroundColor: selectedExamId === null ? `${colors.primary}18` : colors.surfaceVariant,
+                        borderColor: selectedExamId === null ? colors.primary : colors.cardBorder,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        TYPOGRAPHY.captionBold,
+                        { color: selectedExamId === null ? colors.primary : colors.textSecondary },
+                      ]}
+                    >
+                      General (No Exam)
+                    </Text>
+                  </Pressable>
+                  {exams.map((ex) => {
+                    const isSelected = selectedExamId === ex.id;
+                    return (
+                      <Pressable
+                        key={ex.id}
+                        onPress={() => setSelectedExamId(ex.id)}
+                        style={[
+                          styles.examChip,
+                          {
+                            backgroundColor: isSelected ? `${ex.color}20` : colors.surfaceVariant,
+                            borderColor: isSelected ? ex.color : colors.cardBorder,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            TYPOGRAPHY.captionBold,
+                            { color: isSelected ? ex.color : colors.textSecondary },
+                          ]}
+                        >
+                          {ex.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
             <Text style={[TYPOGRAPHY.captionBold, { color: colors.textSecondary, marginBottom: 6 }]}>
               CATEGORY NAME *
             </Text>
@@ -225,16 +303,27 @@ export function CategoryModal({
             </View>
           </ScrollView>
 
-          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+          <View
+            style={[
+              styles.footer,
+              {
+                borderTopColor: colors.border,
+                backgroundColor: colors.card,
+                paddingBottom: Math.max(insets.bottom, 16) + (Platform.OS === 'android' ? 14 : 8),
+              },
+            ]}
+          >
             <Pressable
               onPress={onClose}
               style={[styles.btn, { borderColor: colors.border, borderWidth: 1 }]}
+              hitSlop={6}
             >
               <Text style={[TYPOGRAPHY.bodyBold, { color: colors.textSecondary }]}>Cancel</Text>
             </Pressable>
             <Pressable
               onPress={handleSave}
               style={[styles.btn, { backgroundColor: colors.primary }]}
+              hitSlop={6}
             >
               <Text style={[TYPOGRAPHY.bodyBold, { color: '#FFFFFF' }]}>
                 {category ? 'Save Changes' : 'Create Category'}
@@ -273,6 +362,12 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 20,
+  },
+  examChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
   },
   input: {
     height: 48,

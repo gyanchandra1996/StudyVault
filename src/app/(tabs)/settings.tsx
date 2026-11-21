@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { router } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useAppStore } from '@/stores/useAppStore';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { TYPOGRAPHY } from '@/theme/typography';
 import { Header } from '@/components/common/Header';
 import { exportFullAppBackup, restoreAppFromBackup } from '@/services/backupService';
@@ -30,6 +31,17 @@ export default function SettingsScreen() {
     checkBiometrics,
   } = useAuthStore();
   const loadAll = useAppStore((state) => state.loadAll);
+  const {
+    isAiEnabled,
+    geminiApiKey,
+    aiModel,
+    showDeleteActions,
+    setAiEnabled,
+    setGeminiApiKey,
+    setAiModel,
+    setShowDeleteActions,
+    testAiConnection,
+  } = useSettingsStore();
 
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -37,6 +49,39 @@ export default function SettingsScreen() {
   const [inputPin, setInputPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinError, setPinError] = useState('');
+
+  const [apiKeyInput, setApiKeyInput] = useState(geminiApiKey);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isTestingAi, setIsTestingAi] = useState(false);
+
+  useEffect(() => {
+    setApiKeyInput(geminiApiKey);
+  }, [geminiApiKey]);
+
+  const handleSaveApiKey = async () => {
+    await setGeminiApiKey(apiKeyInput.trim());
+    Alert.alert('Saved', 'Gemini API Key saved successfully.');
+  };
+
+  const handleTestAi = async () => {
+    const keyToTest = apiKeyInput.trim() || geminiApiKey.trim();
+    if (!keyToTest) {
+      Alert.alert('API Key Required', 'Please enter your Gemini API Key before testing.');
+      return;
+    }
+    setIsTestingAi(true);
+    try {
+      const result = await testAiConnection(keyToTest, aiModel);
+      if (result.success) {
+        await setGeminiApiKey(keyToTest);
+        Alert.alert('✓ Success', result.message);
+      } else {
+        Alert.alert('Test Failed', result.message);
+      }
+    } finally {
+      setIsTestingAi(false);
+    }
+  };
 
   const handleBackup = async () => {
     setIsBackingUp(true);
@@ -245,6 +290,180 @@ export default function SettingsScreen() {
               <Ionicons name="chevron-forward" size={18} color={colors.primary} />
             </Pressable>
           )}
+        </View>
+
+        {/* AI ASSISTANT & QUESTION GENERATOR */}
+        <View style={styles.sectionHeader}>
+          <Text style={[TYPOGRAPHY.captionBold, { color: colors.textSecondary }]}>
+            AI ASSISTANT & QUESTION GENERATOR
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.cardGroup,
+            { backgroundColor: colors.card, borderColor: colors.cardBorder },
+          ]}
+        >
+          {/* AI Enable Toggle */}
+          <View style={styles.row}>
+            <View style={styles.rowLabelGroup}>
+              <Ionicons name="sparkles" size={22} color={colors.primary} />
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={[TYPOGRAPHY.bodyBold, { color: colors.text }]}>Enable AI Features</Text>
+                <Text style={[TYPOGRAPHY.caption, { color: colors.textSecondary }]}>
+                  {isAiEnabled ? 'Active (Gemini Question Generator)' : 'Disabled'}
+                </Text>
+              </View>
+            </View>
+
+            <Switch
+              value={isAiEnabled}
+              onValueChange={setAiEnabled}
+              thumbColor={isAiEnabled ? colors.primary : colors.surfaceVariant}
+              trackColor={{ false: colors.cardBorder, true: `${colors.primary}60` }}
+            />
+          </View>
+
+          {isAiEnabled && (
+            <>
+              {/* Gemini API Key */}
+              <View style={[styles.aiInputRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <Text style={[TYPOGRAPHY.captionBold, { color: colors.textSecondary }]}>
+                    GOOGLE GEMINI API KEY
+                  </Text>
+                  <Pressable onPress={() => setShowApiKey(!showApiKey)} hitSlop={6}>
+                    <Text style={[TYPOGRAPHY.tiny, { color: colors.primary, fontWeight: '700' }]}>
+                      {showApiKey ? 'Hide Key' : 'Show Key'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={[styles.apiKeyInputContainer, { backgroundColor: colors.surfaceVariant, borderColor: colors.cardBorder }]}>
+                  <TextInput
+                    value={apiKeyInput}
+                    onChangeText={setApiKeyInput}
+                    placeholder="Paste Gemini API Key..."
+                    placeholderTextColor={colors.textMuted}
+                    secureTextEntry={!showApiKey}
+                    style={[styles.apiKeyInput, TYPOGRAPHY.body, { color: colors.text }]}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Pressable
+                    onPress={handleSaveApiKey}
+                    style={[styles.saveKeyBtn, { backgroundColor: colors.primary }]}
+                    hitSlop={4}
+                  >
+                    <Text style={[TYPOGRAPHY.captionBold, { color: '#FFFFFF' }]}>Save</Text>
+                  </Pressable>
+                </View>
+                <Text style={[TYPOGRAPHY.tiny, { color: colors.textMuted, marginTop: 4 }]}>
+                  Get a free API key from Google AI Studio (aistudio.google.com).
+                </Text>
+              </View>
+
+              {/* Model Selector */}
+              <View style={[styles.row, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                <View style={styles.rowLabelGroup}>
+                  <Ionicons name="hardware-chip-outline" size={20} color={colors.primary} />
+                  <View style={{ marginLeft: 12 }}>
+                    <Text style={[TYPOGRAPHY.bodyBold, { color: colors.text }]}>AI Model</Text>
+                    <Text style={[TYPOGRAPHY.caption, { color: colors.textSecondary }]}>
+                      {aiModel === 'gemini-1.5-flash' ? '1.5 Flash (Fast & Free)' : '1.5 Pro (Deep)'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.segmentContainer, { backgroundColor: colors.surfaceVariant }]}>
+                  {(['gemini-1.5-flash', 'gemini-1.5-pro'] as const).map((m) => {
+                    const isSelected = aiModel === m;
+                    const label = m === 'gemini-1.5-flash' ? 'Flash' : 'Pro';
+                    return (
+                      <Pressable
+                        key={m}
+                        onPress={() => setAiModel(m)}
+                        style={[
+                          styles.segmentBtn,
+                          isSelected && [styles.segmentBtnActive, { backgroundColor: colors.primary }],
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            TYPOGRAPHY.tiny,
+                            { color: isSelected ? '#FFFFFF' : colors.textSecondary, fontWeight: '700' },
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Test Connection Button */}
+              <View style={[styles.row, { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 12 }]}>
+                <Pressable
+                  onPress={handleTestAi}
+                  disabled={isTestingAi}
+                  style={[
+                    styles.testAiBtn,
+                    { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` },
+                  ]}
+                >
+                  {isTestingAi ? (
+                    <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
+                  ) : (
+                    <Ionicons name="flash-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={[TYPOGRAPHY.captionBold, { color: colors.primary }]}>
+                    {isTestingAi ? 'Verifying Key...' : 'Test AI Connection'}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* STUDY SAFETY & DATA PROTECTION (Safe Study Mode) */}
+        <View style={styles.sectionHeader}>
+          <Text style={[TYPOGRAPHY.captionBold, { color: colors.textSecondary }]}>
+            DATA PROTECTION & STUDY SAFETY
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.cardGroup,
+            { backgroundColor: colors.card, borderColor: colors.cardBorder },
+          ]}
+        >
+          <View style={styles.row}>
+            <View style={styles.rowLabelGroup}>
+              <Ionicons
+                name={showDeleteActions ? 'trash-outline' : 'shield-checkmark'}
+                size={22}
+                color={showDeleteActions ? colors.textSecondary : '#10B981'}
+              />
+              <View style={{ marginLeft: 12, flex: 1, paddingRight: 8 }}>
+                <Text style={[TYPOGRAPHY.bodyBold, { color: colors.text }]}>Show Delete Options</Text>
+                <Text style={[TYPOGRAPHY.caption, { color: colors.textSecondary }]}>
+                  {showDeleteActions
+                    ? 'Delete buttons visible across cards and exams'
+                    : 'Safe Study Mode (Delete buttons hidden to prevent accidents)'}
+                </Text>
+              </View>
+            </View>
+
+            <Switch
+              value={showDeleteActions}
+              onValueChange={setShowDeleteActions}
+              thumbColor={showDeleteActions ? colors.primary : colors.surfaceVariant}
+              trackColor={{ false: colors.cardBorder, true: `${colors.primary}60` }}
+            />
+          </View>
         </View>
 
         {/* STUDY TOOLS & NAVIGATION TILES */}
@@ -577,7 +796,10 @@ const styles = StyleSheet.create({
   },
   accentColorsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
+    maxWidth: 200,
+    justifyContent: 'flex-end',
   },
   accentCircle: {
     width: 26,
@@ -588,6 +810,36 @@ const styles = StyleSheet.create({
   },
   accentCircleSelected: {
     borderWidth: 2,
+  },
+  aiInputRow: {
+    padding: 16,
+  },
+  apiKeyInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  apiKeyInput: {
+    flex: 1,
+    height: 44,
+    paddingHorizontal: 12,
+  },
+  saveKeyBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginRight: 4,
+    borderRadius: 8,
+  },
+  testAiBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
   },
   aboutContainer: {
     alignItems: 'center',

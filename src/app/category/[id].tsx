@@ -13,6 +13,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '@/stores/useAppStore';
 import { useTheme } from '@/hooks/useTheme';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { TYPOGRAPHY } from '@/theme/typography';
 import { Header } from '@/components/common/Header';
 import { SearchBar } from '@/components/common/SearchBar';
@@ -31,6 +32,7 @@ export default function CategoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const categoryId = parseInt(id, 10);
   const { colors } = useTheme();
+  const showDeleteActions = useSettingsStore((s) => s.showDeleteActions);
 
   const {
     importPdfFiles,
@@ -210,7 +212,7 @@ export default function CategoryDetailScreen() {
                   {sub.name} ({sub.pdf_count ?? 0})
                 </Text>
 
-                {isSelected && (
+                {isSelected && showDeleteActions && (
                   <Pressable
                     onPress={(e) => {
                       e.stopPropagation();

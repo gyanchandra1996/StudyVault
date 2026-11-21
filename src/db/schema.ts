@@ -1,13 +1,25 @@
-export const SCHEMA_SQL = `
+export const SCHEMA_TABLES_SQL = `
 PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS exams (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT,
+  description TEXT,
+  icon TEXT NOT NULL DEFAULT 'school-outline',
+  color TEXT NOT NULL DEFAULT '#6366F1',
+  created_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exam_id INTEGER,
   name TEXT NOT NULL,
   description TEXT,
   icon TEXT NOT NULL DEFAULT 'folder',
   color TEXT NOT NULL DEFAULT '#6366F1',
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS subcategories (
@@ -28,6 +40,8 @@ CREATE TABLE IF NOT EXISTS pdf_documents (
   file_size INTEGER NOT NULL DEFAULT 0,
   page_count INTEGER NOT NULL DEFAULT 0,
   is_favorite INTEGER NOT NULL DEFAULT 0,
+  is_completed INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
   last_read_page INTEGER NOT NULL DEFAULT 1,
   last_opened_at TEXT,
   created_at TEXT NOT NULL,
@@ -123,6 +137,55 @@ CREATE TABLE IF NOT EXISTS scratchpads (
   FOREIGN KEY (pdf_id) REFERENCES pdf_documents(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS quiz_questions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exam_id INTEGER,
+  category_id INTEGER,
+  subcategory_id INTEGER,
+  question_text TEXT NOT NULL,
+  option_a TEXT NOT NULL,
+  option_b TEXT NOT NULL,
+  option_c TEXT NOT NULL,
+  option_d TEXT NOT NULL,
+  correct_option TEXT NOT NULL,
+  explanation TEXT,
+  difficulty TEXT NOT NULL DEFAULT 'medium',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE SET NULL,
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+  FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exam_id INTEGER,
+  category_id INTEGER,
+  title TEXT NOT NULL,
+  total_questions INTEGER NOT NULL,
+  correct_count INTEGER NOT NULL,
+  wrong_count INTEGER NOT NULL,
+  skipped_count INTEGER NOT NULL,
+  score_percentage REAL NOT NULL,
+  time_spent_seconds INTEGER NOT NULL,
+  completed_at TEXT NOT NULL,
+  FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE SET NULL,
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS quiz_attempt_answers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  attempt_id INTEGER NOT NULL,
+  question_id INTEGER NOT NULL,
+  selected_option TEXT,
+  is_correct INTEGER NOT NULL,
+  FOREIGN KEY (attempt_id) REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_id) REFERENCES quiz_questions(id) ON DELETE CASCADE
+);
+`;
+
+export const SCHEMA_INDEXES_SQL = `
+CREATE INDEX IF NOT EXISTS idx_exams_name ON exams(name);
+CREATE INDEX IF NOT EXISTS idx_categories_exam_id ON categories(exam_id);
 CREATE INDEX IF NOT EXISTS idx_subcategories_category_id ON subcategories(category_id);
 CREATE INDEX IF NOT EXISTS idx_pdf_documents_category_id ON pdf_documents(category_id);
 CREATE INDEX IF NOT EXISTS idx_pdf_documents_subcategory_id ON pdf_documents(subcategory_id);
@@ -136,7 +199,37 @@ CREATE INDEX IF NOT EXISTS idx_flashcards_pdf_id ON flashcards(pdf_id);
 CREATE INDEX IF NOT EXISTS idx_study_sessions_pdf_id ON study_sessions(pdf_id);
 CREATE INDEX IF NOT EXISTS idx_study_sessions_completed_at ON study_sessions(completed_at);
 CREATE INDEX IF NOT EXISTS idx_scratchpads_pdf_id ON scratchpads(pdf_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_questions_exam_id ON quiz_questions(exam_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_questions_category_id ON quiz_questions(category_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_exam_id ON quiz_attempts(exam_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempt_answers_attempt_id ON quiz_attempt_answers(attempt_id);
 `;
+
+export const SCHEMA_SQL = `${SCHEMA_TABLES_SQL}\n${SCHEMA_INDEXES_SQL}`;
+
+export const SEED_EXAMS = [
+  {
+    name: 'DSSSB',
+    code: 'DSSSB-2026',
+    description: 'Delhi Subordinate Services Selection Board (PRT, TGT, PGT)',
+    icon: 'school-outline',
+    color: '#2563EB',
+  },
+  {
+    name: 'EMRS',
+    code: 'EMRS-2026',
+    description: 'Eklavya Model Residential Schools Recruitment Exam',
+    icon: 'business-outline',
+    color: '#059669',
+  },
+  {
+    name: 'General Study',
+    code: 'GEN-STUDY',
+    description: 'Self-study notes, programming & competitive preparation',
+    icon: 'book-outline',
+    color: '#6366F1',
+  },
+];
 
 export const SEED_CATEGORIES = [
   {
@@ -190,5 +283,85 @@ export const SEED_CATEGORIES = [
     icon: 'code-slash-outline',
     color: '#059669',
     subcategories: ['React & React Native', 'TypeScript & JS', 'Python & AI', 'Rust & Go'],
+  },
+];
+
+export const SEED_QUESTIONS = [
+  {
+    exam_name: 'DSSSB',
+    question_text: 'Which data structure follows the Last-In First-Out (LIFO) principle?',
+    option_a: 'Queue',
+    option_b: 'Stack',
+    option_c: 'Tree',
+    option_d: 'Linked List',
+    correct_option: 'B',
+    explanation: 'A Stack is a linear data structure that adheres to the LIFO (Last-In-First-Out) principle, where the last element inserted is the first to be popped.',
+    difficulty: 'easy',
+  },
+  {
+    exam_name: 'DSSSB',
+    question_text: 'What is the time complexity of searching an element in a balanced Binary Search Tree (BST)?',
+    option_a: 'O(1)',
+    option_b: 'O(n)',
+    option_c: 'O(log n)',
+    option_d: 'O(n log n)',
+    correct_option: 'C',
+    explanation: 'In a balanced BST of n nodes, height is O(log n), making search, insertion, and deletion O(log n).',
+    difficulty: 'medium',
+  },
+  {
+    exam_name: 'EMRS',
+    question_text: 'Which constitutional provision in India provides for the establishment of EMRS schools?',
+    option_a: 'Article 275(1)',
+    option_b: 'Article 370',
+    option_c: 'Article 21A',
+    option_d: 'Article 45',
+    correct_option: 'A',
+    explanation: 'EMRS (Eklavya Model Residential Schools) are established under Article 275(1) of the Indian Constitution by the Ministry of Tribal Affairs.',
+    difficulty: 'medium',
+  },
+  {
+    exam_name: 'EMRS',
+    question_text: 'In Pedagogy and Teaching Aptitude, what does NEP 2020 emphasize regarding assessment?',
+    option_a: 'Rote memorization and summative exams only',
+    option_b: 'Competency-based, continuous and 360-degree holistic evaluation',
+    option_c: 'Only year-end annual board examinations',
+    option_d: 'Elimination of all formative evaluations',
+    correct_option: 'B',
+    explanation: 'National Education Policy (NEP) 2020 emphasizes shifting from summative to regular, formative, and competency-based assessment assessing higher-order skills.',
+    difficulty: 'easy',
+  },
+  {
+    exam_name: 'DSSSB',
+    question_text: 'Which normal form eliminates partial dependency in relational database management systems?',
+    option_a: '1NF',
+    option_b: '2NF',
+    option_c: '3NF',
+    option_d: 'BCNF',
+    correct_option: 'B',
+    explanation: 'A relation is in 2NF if it is in 1NF and no non-prime attribute is partially dependent on any candidate key of the table.',
+    difficulty: 'medium',
+  },
+  {
+    exam_name: 'DSSSB',
+    question_text: 'What was the first computer network that laid the foundation of modern networking? / आधुनिक नेटवर्किंग की नींव रखने वाला पहला नेटवर्क कौन सा था?',
+    option_a: 'NSFNET',
+    option_b: 'ARPANET',
+    option_c: 'INTRANET',
+    option_d: 'ETHERNET',
+    correct_option: 'B',
+    explanation: 'ARPANET (Advanced Research Projects Agency Network) was created in 1969 by the US Department of Defense and is considered the foundation of modern networking.',
+    difficulty: 'easy',
+  },
+  {
+    exam_name: 'DSSSB',
+    question_text: 'In which year was ARPANET developed by the US Department of Defense (ARPA)? / अमेरिकी रक्षा विभाग द्वारा ARPANET किस वर्ष विकसित किया गया था?',
+    option_a: '1965',
+    option_b: '1969',
+    option_c: '1975',
+    option_d: '1982',
+    correct_option: 'B',
+    explanation: 'ARPANET was launched in 1969 to create a reliable and distributed communication network between computer systems.',
+    difficulty: 'easy',
   },
 ];

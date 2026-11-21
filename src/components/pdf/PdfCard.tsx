@@ -7,10 +7,13 @@ import { PdfDocument } from '@/types/database';
 import { useTheme } from '@/hooks/useTheme';
 import { TYPOGRAPHY } from '@/theme/typography';
 import { formatFileSize } from '@/services/fileStorage';
+import { useAppStore } from '@/stores/useAppStore';
+import { PdfActionSheetModal } from './PdfActionSheetModal';
 
 interface PdfCardProps {
   pdf: PdfDocument;
   onToggleFavorite?: (id: number) => void;
+  onToggleCompleted?: (id: number) => void;
   onRename?: (pdf: PdfDocument) => void;
   onMove?: (pdf: PdfDocument) => void;
   onDelete?: (pdf: PdfDocument) => void;
@@ -19,18 +22,44 @@ interface PdfCardProps {
 export function PdfCard({
   pdf,
   onToggleFavorite,
+  onToggleCompleted,
   onRename,
   onMove,
   onDelete,
 }: PdfCardProps) {
   const { colors, isDark } = useTheme();
-  const [showMenu, setShowMenu] = useState(false);
+  const [showSheet, setShowSheet] = useState(false);
+  const togglePdfCompleted = useAppStore((s) => s.togglePdfCompleted);
+
+  const handleToggleComplete = (doc: PdfDocument) => {
+    if (onToggleCompleted) {
+      onToggleCompleted(doc.id);
+    } else {
+      togglePdfCompleted(doc.id);
+    }
+  };
 
   const handleOpen = () => {
     router.push({
       pathname: '/reader/[id]',
       params: { id: String(pdf.id) },
     });
+  };
+
+  const handleOpenInNativeViewer = async (doc: PdfDocument) => {
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('Unavailable', 'Device viewer sharing is not supported on this device.');
+        return;
+      }
+      await Sharing.shareAsync(doc.local_path, {
+        dialogTitle: `Open ${doc.title} in Device PDF App`,
+        mimeType: 'application/pdf',
+      });
+    } catch (e: any) {
+      Alert.alert('Notice', e?.message || 'Could not open document in external viewer.');
+    }
   };
 
   const handleShare = async () => {
@@ -109,7 +138,7 @@ export function PdfCard({
             )}
 
             <Pressable
-              onPress={() => setShowMenu((prev) => !prev)}
+              onPress={() => setShowSheet(true)}
               style={styles.iconBtn}
               hitSlop={8}
             >
@@ -146,6 +175,15 @@ export function PdfCard({
             </View>
           )}
 
+          {pdf.is_completed === 1 && (
+            <View style={[styles.completedBadge, { backgroundColor: '#10B98118', borderColor: '#10B98140' }]}>
+              <Ionicons name="checkmark-circle" size={12} color="#10B981" />
+              <Text style={[TYPOGRAPHY.tiny, { color: '#10B981', fontWeight: '700', marginLeft: 3 }]}>
+                Completed
+              </Text>
+            </View>
+          )}
+
           <Text style={[TYPOGRAPHY.caption, { color: colors.textMuted }]}>
             {formatFileSize(pdf.file_size)}
           </Text>
@@ -158,91 +196,41 @@ export function PdfCard({
         </View>
 
         {/* Reading Progress Indicator */}
-        {pdf.page_count > 0 && pdf.last_read_page > 1 && (
+        {pdf.page_count > 0 && (pdf.last_read_page > 1 || pdf.is_completed === 1) && (
           <View style={styles.progressContainer}>
             <View style={[styles.progressBarTrack, { backgroundColor: colors.surfaceVariant }]}>
               <View
                 style={[
                   styles.progressBarFill,
                   {
-                    backgroundColor: pdf.category_color || colors.primary,
-                    width: `${progress}%`,
+                    backgroundColor: pdf.is_completed === 1 ? '#10B981' : (pdf.category_color || colors.primary),
+                    width: pdf.is_completed === 1 ? '100%' : `${progress}%`,
                   },
                 ]}
               />
             </View>
-            <Text style={[TYPOGRAPHY.tiny, { color: colors.textSecondary, marginTop: 4 }]}>
-              Page {pdf.last_read_page} of {pdf.page_count} ({progress}%)
+            <Text style={[TYPOGRAPHY.tiny, { color: pdf.is_completed === 1 ? '#10B981' : colors.textSecondary, marginTop: 4, fontWeight: pdf.is_completed === 1 ? '700' : '400' }]}>
+              {pdf.is_completed === 1
+                ? `✓ Completed • Finished reading all ${pdf.page_count} pages`
+                : `Page ${pdf.last_read_page} of ${pdf.page_count} (${progress}%)`}
             </Text>
           </View>
         )}
       </Pressable>
 
-      {/* Dropdown Menu */}
-      {showMenu && (
-        <View
-          style={[
-            styles.menuDropdown,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.cardBorder,
-              shadowColor: colors.shadow,
-            },
-          ]}
-        >
-          <Pressable
-            onPress={() => {
-              setShowMenu(false);
-              onRename?.(pdf);
-            }}
-            style={styles.menuItem}
-          >
-            <Ionicons name="pencil-outline" size={16} color={colors.text} />
-            <Text style={[TYPOGRAPHY.captionBold, { color: colors.text, marginLeft: 8 }]}>
-              Rename
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              setShowMenu(false);
-              onMove?.(pdf);
-            }}
-            style={styles.menuItem}
-          >
-            <Ionicons name="folder-open-outline" size={16} color={colors.text} />
-            <Text style={[TYPOGRAPHY.captionBold, { color: colors.text, marginLeft: 8 }]}>
-              Move to Category
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              setShowMenu(false);
-              handleShare();
-            }}
-            style={styles.menuItem}
-          >
-            <Ionicons name="share-social-outline" size={16} color={colors.text} />
-            <Text style={[TYPOGRAPHY.captionBold, { color: colors.text, marginLeft: 8 }]}>
-              Share PDF
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              setShowMenu(false);
-              onDelete?.(pdf);
-            }}
-            style={[styles.menuItem, { borderTopWidth: 1, borderTopColor: colors.border }]}
-          >
-            <Ionicons name="trash-outline" size={16} color={colors.error} />
-            <Text style={[TYPOGRAPHY.captionBold, { color: colors.error, marginLeft: 8 }]}>
-              Delete
-            </Text>
-          </Pressable>
-        </View>
-      )}
+      {/* Action Sheet Modal (replaces inline dropdown for 100% visibility) */}
+      <PdfActionSheetModal
+        visible={showSheet}
+        pdf={pdf}
+        onClose={() => setShowSheet(false)}
+        onOpenInNativeViewer={handleOpenInNativeViewer}
+        onRename={(doc) => onRename?.(doc)}
+        onMove={(doc) => onMove?.(doc)}
+        onShare={handleShare}
+        onToggleFavorite={onToggleFavorite}
+        onToggleCompleted={handleToggleComplete}
+        onDelete={(doc) => onDelete?.(doc)}
+      />
     </View>
   );
 }
@@ -304,6 +292,14 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginRight: 5,
   },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
   progressContainer: {
     marginTop: 10,
   },
@@ -316,25 +312,5 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     borderRadius: 2,
-  },
-  menuDropdown: {
-    position: 'absolute',
-    top: 52,
-    right: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 4,
-    width: 170,
-    zIndex: 100,
-    elevation: 8,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
   },
 });

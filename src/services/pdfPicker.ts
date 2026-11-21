@@ -12,7 +12,7 @@ export async function pickPdfDocuments(): Promise<PickedPdf[]> {
     const result = await DocumentPicker.getDocumentAsync({
       type: 'application/pdf',
       multiple: true,
-      copyToCacheDirectory: false, // Keep original content:// URI for direct ContentResolver stream reading
+      copyToCacheDirectory: true, // Guarantees a persistent readable copy in internal app cache
     });
 
     if (result.canceled || !result.assets || result.assets.length === 0) {

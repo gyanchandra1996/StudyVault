@@ -3,45 +3,127 @@ import { Category, Subcategory } from '@/types/database';
 
 export function getAllCategories(): Category[] {
   const db = getDatabase();
-  return db.getAllSync<Category>(`
-    SELECT c.*, 
-      COUNT(DISTINCT p.id) as pdf_count
-    FROM categories c
-    LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
-    GROUP BY c.id
-    ORDER BY c.name ASC
-  `);
+  try {
+    return db.getAllSync<Category>(`
+      SELECT c.*, 
+        COUNT(DISTINCT p.id) as pdf_count,
+        e.name as exam_name,
+        e.color as exam_color
+      FROM categories c
+      LEFT JOIN exams e ON e.id = c.exam_id
+      LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
+      GROUP BY c.id
+      ORDER BY c.name ASC
+    `);
+  } catch (err) {
+    console.warn('Notice in getAllCategories join, trying direct fallback:', err);
+    try {
+      return db.getAllSync<Category>(`
+        SELECT c.*, 
+          COUNT(DISTINCT p.id) as pdf_count
+        FROM categories c
+        LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
+        GROUP BY c.id
+        ORDER BY c.name ASC
+      `);
+    } catch {
+      return [];
+    }
+  }
+}
+
+export function getCategoriesByExam(examId: number): Category[] {
+  const db = getDatabase();
+  try {
+    return db.getAllSync<Category>(
+      `
+      SELECT c.*, 
+        COUNT(DISTINCT p.id) as pdf_count,
+        e.name as exam_name,
+        e.color as exam_color
+      FROM categories c
+      LEFT JOIN exams e ON e.id = c.exam_id
+      LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
+      WHERE c.exam_id = ?
+      GROUP BY c.id
+      ORDER BY c.name ASC
+    `,
+      [examId]
+    );
+  } catch (err) {
+    console.warn('Notice in getCategoriesByExam fallback:', err);
+    try {
+      return db.getAllSync<Category>(
+        `
+        SELECT c.*, 
+          COUNT(DISTINCT p.id) as pdf_count
+        FROM categories c
+        LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
+        WHERE c.exam_id = ?
+        GROUP BY c.id
+        ORDER BY c.name ASC
+      `,
+        [examId]
+      );
+    } catch {
+      return [];
+    }
+  }
 }
 
 export function getCategoryById(id: number): Category | null {
   const db = getDatabase();
-  return db.getFirstSync<Category>(
-    `
-    SELECT c.*, 
-      COUNT(DISTINCT p.id) as pdf_count
-    FROM categories c
-    LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
-    WHERE c.id = ?
-    GROUP BY c.id
-  `,
-    [id]
-  );
+  try {
+    return db.getFirstSync<Category>(
+      `
+      SELECT c.*, 
+        COUNT(DISTINCT p.id) as pdf_count,
+        e.name as exam_name,
+        e.color as exam_color
+      FROM categories c
+      LEFT JOIN exams e ON e.id = c.exam_id
+      LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
+      WHERE c.id = ?
+      GROUP BY c.id
+    `,
+      [id]
+    );
+  } catch (err) {
+    console.warn('Notice in getCategoryById fallback:', err);
+    try {
+      return db.getFirstSync<Category>(
+        `
+        SELECT c.*, 
+          COUNT(DISTINCT p.id) as pdf_count
+        FROM categories c
+        LEFT JOIN pdf_documents p ON p.category_id = c.id AND p.is_deleted = 0
+        WHERE c.id = ?
+        GROUP BY c.id
+      `,
+        [id]
+      );
+    } catch {
+      return null;
+    }
+  }
 }
 
 export function createCategory(
   name: string,
   description?: string,
   icon: string = 'folder',
-  color: string = '#6366F1'
+  color: string = '#6366F1',
+  examId?: number | null
 ): Category {
   const db = getDatabase();
   const now = new Date().toISOString();
   const result = db.runSync(
-    'INSERT INTO categories (name, description, icon, color, created_at) VALUES (?, ?, ?, ?, ?)',
-    [name.trim(), description?.trim() || null, icon, color, now]
+    'INSERT INTO categories (exam_id, name, description, icon, color, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [examId ?? null, name.trim(), description?.trim() || null, icon, color, now]
   );
   return {
-    id: result.lastInsertRowId,
+    id: Number(result.lastInsertRowId),
+    exam_id: examId ?? null,
     name: name.trim(),
     description: description?.trim() || null,
     icon,
@@ -56,16 +138,26 @@ export function updateCategory(
   name: string,
   description?: string,
   icon?: string,
-  color?: string
+  color?: string,
+  examId?: number | null
 ): void {
   const db = getDatabase();
   db.runSync(
     `
     UPDATE categories 
-    SET name = ?, description = ?, icon = COALESCE(?, icon), color = COALESCE(?, color)
+    SET name = ?, description = ?, icon = COALESCE(?, icon), color = COALESCE(?, color),
+        exam_id = CASE WHEN ? IS NOT NULL THEN ? ELSE exam_id END
     WHERE id = ?
   `,
-    [name.trim(), description?.trim() || null, icon ?? null, color ?? null, id]
+    [
+      name.trim(),
+      description?.trim() || null,
+      icon ?? null,
+      color ?? null,
+      examId !== undefined ? examId : null,
+      examId ?? null,
+      id,
+    ]
   );
 }
 

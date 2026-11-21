@@ -164,6 +164,7 @@ export function updatePdf(
     categoryId?: number | null;
     subcategoryId?: number | null;
     pageCount?: number;
+    localPath?: string;
   }
 ): void {
   const db = getDatabase();
@@ -186,6 +187,10 @@ export function updatePdf(
     updates.push('page_count = ?');
     values.push(params.pageCount);
   }
+  if (params.localPath !== undefined) {
+    updates.push('local_path = ?');
+    values.push(params.localPath);
+  }
 
   if (updates.length > 0) {
     values.push(id);
@@ -203,6 +208,30 @@ export function toggleFavorite(id: number): boolean {
   const next = current.is_favorite === 1 ? 0 : 1;
   db.runSync('UPDATE pdf_documents SET is_favorite = ? WHERE id = ?', [next, id]);
   return next === 1;
+}
+
+export function togglePdfCompleted(id: number, forceCompleted?: boolean): boolean {
+  const db = getDatabase();
+  const current = db.getFirstSync<{ is_completed: number }>(
+    'SELECT is_completed FROM pdf_documents WHERE id = ?',
+    [id]
+  );
+  if (!current) return false;
+  const next = forceCompleted !== undefined ? (forceCompleted ? 1 : 0) : (current.is_completed === 1 ? 0 : 1);
+  const now = next === 1 ? new Date().toISOString() : null;
+  db.runSync(
+    'UPDATE pdf_documents SET is_completed = ?, completed_at = ? WHERE id = ?',
+    [next, now, id]
+  );
+  return next === 1;
+}
+
+export function getCompletedPdfsCount(): number {
+  const db = getDatabase();
+  const row = db.getFirstSync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM pdf_documents WHERE is_deleted = 0 AND is_completed = 1'
+  );
+  return row?.count || 0;
 }
 
 export function updateReadingProgress(id: number, lastReadPage: number, pageCount?: number): void {

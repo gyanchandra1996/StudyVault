@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Category } from '@/types/database';
 import { useTheme } from '@/hooks/useTheme';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { TYPOGRAPHY } from '@/theme/typography';
 
 interface CategoryCardProps {
@@ -20,6 +21,7 @@ export function CategoryCard({
   onDelete,
 }: CategoryCardProps) {
   const { colors, isDark } = useTheme();
+  const showDeleteActions = useSettingsStore((s) => s.showDeleteActions);
 
   const handlePress = () => {
     router.push({
@@ -73,7 +75,7 @@ export function CategoryCard({
               <Ionicons name="pencil-outline" size={16} color={colors.textMuted} />
             </Pressable>
           )}
-          {onDelete && (
+          {onDelete && showDeleteActions && (
             <Pressable
               onPress={(e) => {
                 e.stopPropagation();
@@ -112,6 +114,25 @@ export function CategoryCard({
             {category.pdf_count || 0} {category.pdf_count === 1 ? 'doc' : 'docs'}
           </Text>
         </View>
+
+        {category.exam_name ? (
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: `${category.exam_color || colors.primary}18`, marginLeft: 6 },
+            ]}
+          >
+            <Text
+              style={[
+                TYPOGRAPHY.tiny,
+                { color: category.exam_color || colors.primary, fontWeight: '800' },
+              ]}
+              numberOfLines={1}
+            >
+              {category.exam_name}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );

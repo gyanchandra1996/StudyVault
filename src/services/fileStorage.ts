@@ -177,3 +177,181 @@ export function formatFileSize(bytes: number): string {
   const val = parseFloat((bytes / Math.pow(k, i)).toFixed(1));
   return `${val} ${sizes[i]}`;
 }
+
+async function loadBlobFromUri(uri: string): Promise<Blob> {
+  // Strategy A: Native fetch()
+  try {
+    const res = await fetch(uri);
+    if (res.ok || res.status === 0 || res.status === 200) {
+      const b = await res.blob();
+      if (b && b.size > 0) return b;
+    }
+  } catch {}
+
+  // Strategy B: Native XMLHttpRequest blob loader (bypasses Expo Go filesystem sandbox on Android)
+  return new Promise<Blob>((resolve, reject) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', uri, true);
+      xhr.responseType = 'blob';
+      xhr.onload = () => {
+        if (xhr.response && xhr.response.size > 0) {
+          resolve(xhr.response);
+        } else {
+          reject(new Error(`XHR returned empty blob for ${uri}`));
+        }
+      };
+      xhr.onerror = (e) =>
+        reject(new Error(`XHR failed: ${(e as any)?.message || 'network error'}`));
+      xhr.ontimeout = () => reject(new Error('XHR timed out'));
+      xhr.timeout = 20000;
+      xhr.send(null);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+export function resolveLocalPdfUri(storedPath: string): string {
+  if (!storedPath) return '';
+  const currentDir = getPdfStorageDirectory();
+  const filename = storedPath.split('/').pop() || storedPath;
+  return `${currentDir}${filename}`;
+}
+
+export async function readPdfFileAsChunks(
+  primaryUri: string,
+  onChunk: (base64Chunk: string, offset: number, totalSize: number) => void
+): Promise<{ totalSize: number; validPath: string }> {
+  const CHUNK_SIZE = 256 * 1024; // 256 KB chunk ensures Android Binder IPC transaction limits are safe
+
+  const currentDir = getPdfStorageDirectory();
+  const rawFilename = primaryUri.split('/').pop() || '';
+  const filename = decodeURIComponent(rawFilename);
+  const resolvedCurrentUri = `${currentDir}${filename}`;
+
+  // Build a prioritized list of candidate paths to search across:
+  // 1. Current session directory with normalized filename
+  // 2. Current session directory with raw filename
+  // 3. Cache directory variants
+  // 4. Original stored URI & decoded / unescaped variants
+  const cacheDir = FileSystem.cacheDirectory || '';
+  const rawCandidates: string[] = [
+    resolvedCurrentUri,
+    `${currentDir}${rawFilename}`,
+    `${cacheDir}${PDF_SUBDIR}${filename}`,
+    `${cacheDir}${filename}`,
+    primaryUri,
+  ];
+
+  try {
+    const decodedOnce = decodeURI(primaryUri);
+    if (!rawCandidates.includes(decodedOnce)) rawCandidates.push(decodedOnce);
+  } catch {}
+  try {
+    const decodedComp = decodeURIComponent(primaryUri);
+    if (!rawCandidates.includes(decodedComp)) rawCandidates.push(decodedComp);
+  } catch {}
+  try {
+    const fixedDoubleEncoded = primaryUri
+      .replace(/%2540/g, '%40')
+      .replace(/%252F/g, '%2F');
+    if (!rawCandidates.includes(fixedDoubleEncoded)) rawCandidates.push(fixedDoubleEncoded);
+  } catch {}
+
+  // Filter unique valid candidates
+  const candidates = Array.from(new Set(rawCandidates.filter(Boolean)));
+  let totalSize = 0;
+
+  // Strategy 1: Native FileSystem readAsStringAsync across candidate paths
+  for (const candidate of candidates) {
+    try {
+      const info = await FileSystem.getInfoAsync(candidate);
+      if (!info.exists) continue;
+
+      const candidateSize = 'size' in info && typeof info.size === 'number' ? info.size : 0;
+      if (candidateSize === 0) {
+        const fullBase64 = await FileSystem.readAsStringAsync(candidate, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const computedSize = Math.round((fullBase64.length * 3) / 4);
+        for (let i = 0; i < fullBase64.length; i += CHUNK_SIZE) {
+          onChunk(fullBase64.substring(i, i + CHUNK_SIZE), i, computedSize);
+        }
+        return { totalSize: computedSize, validPath: candidate };
+      }
+
+      for (let offset = 0; offset < candidateSize; offset += CHUNK_SIZE) {
+        const lengthToRead = Math.min(CHUNK_SIZE, candidateSize - offset);
+        const chunk = await FileSystem.readAsStringAsync(candidate, {
+          encoding: FileSystem.EncodingType.Base64,
+          position: offset,
+          length: lengthToRead,
+        });
+        onChunk(chunk, offset, candidateSize);
+      }
+      return { totalSize: candidateSize, validPath: candidate };
+    } catch (fsErr) {
+      console.warn('Native readAsStringAsync attempt notice for candidate:', candidate, (fsErr as any)?.message);
+    }
+  }
+
+  // Strategy 2: Fetch / XHR Blob stream (bypasses Android Expo Go experience scope limitations)
+  for (const candidate of candidates) {
+    try {
+      const blob = await loadBlobFromUri(candidate);
+      totalSize = blob.size || totalSize;
+
+      for (let offset = 0; offset < totalSize; offset += CHUNK_SIZE) {
+        const slice = blob.slice(offset, offset + CHUNK_SIZE);
+        const chunkBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = (reader.result as string) || '';
+            const commaIdx = res.indexOf(',');
+            resolve(commaIdx !== -1 ? res.substring(commaIdx + 1) : res);
+          };
+          reader.onerror = () =>
+            reject(new Error('FileReader slice conversion failed'));
+          reader.readAsDataURL(slice);
+        });
+
+        onChunk(chunkBase64, offset, totalSize);
+      }
+
+      // Auto-cache and save recovered file into the current app storage directory
+      try {
+        await ensurePdfDirectoryExists();
+        const fullBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = (reader.result as string) || '';
+            const commaIdx = res.indexOf(',');
+            resolve(commaIdx !== -1 ? res.substring(commaIdx + 1) : res);
+          };
+          reader.onerror = () =>
+            reject(new Error('FileReader conversion failed'));
+          reader.readAsDataURL(blob);
+        });
+        await FileSystem.writeAsStringAsync(resolvedCurrentUri, fullBase64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+      } catch (saveErr) {
+        console.warn(
+          'Could not save recovered blob to current storage directory:',
+          saveErr
+        );
+      }
+
+      return { totalSize, validPath: resolvedCurrentUri };
+    } catch (streamErr) {
+      console.warn(
+        'Blob stream fallback attempt failed for candidate',
+        candidate,
+        streamErr
+      );
+    }
+  }
+
+  throw new Error(`Unable to read PDF file from storage: ${filename || primaryUri}`);
+}

@@ -12,24 +12,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAppStore } from '@/stores/useAppStore';
+import { usePomodoroStore } from '@/stores/usePomodoroStore';
 import { useTheme } from '@/hooks/useTheme';
 import { TYPOGRAPHY } from '@/theme/typography';
 import { SearchBar } from '@/components/common/SearchBar';
 import { CategoryCard } from '@/components/category/CategoryCard';
 import { PdfCard } from '@/components/pdf/PdfCard';
 import { CategoryModal } from '@/components/category/CategoryModal';
+import { ExamModal } from '@/components/category/ExamModal';
 import { PdfEditModal } from '@/components/pdf/PdfEditModal';
 import { PdfMoveModal } from '@/components/pdf/PdfMoveModal';
 import { ConfirmationModal } from '@/components/common/ConfirmationModal';
-import { PomodoroWidget } from '@/components/study/PomodoroWidget';
+import { StudyTrackerCard } from '@/components/study/StudyTrackerCard';
+import { AssessmentView } from '@/components/assessment/AssessmentView';
 import { pickPdfDocuments } from '@/services/pdfPicker';
-import { Category, PdfDocument } from '@/types/database';
+import { Category, PdfDocument, Exam } from '@/types/database';
 import * as flashcardRepo from '@/db/flashcardRepo';
 import * as studyTimerRepo from '@/db/studyTimerRepo';
 
 export default function HomeScreen() {
   const { colors, isDark, setMode } = useTheme();
   const {
+    exams,
+    selectedExamId,
+    setSelectedExamId,
+    addExam,
+    editExam,
+    removeExam,
     categories,
     pdfs,
     recentPdfs,
@@ -44,30 +53,39 @@ export default function HomeScreen() {
     renamePdf,
     movePdf,
     toggleFavorite,
+    togglePdfCompleted,
     deletePdfToBin,
   } = useAppStore();
 
+  const [activeTopTab, setActiveTopTab] = useState<'study' | 'assessment'>('study');
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
 
   // Modals state
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [examModalVisible, setExamModalVisible] = useState(false);
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
 
   const [editingPdf, setEditingPdf] = useState<PdfDocument | null>(null);
   const [movingPdf, setMovingPdf] = useState<PdfDocument | null>(null);
   const [deletingPdf, setDeletingPdf] = useState<PdfDocument | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
-  const [pomodoroVisible, setPomodoroVisible] = useState(false);
   const [dueCardsCount, setDueCardsCount] = useState(0);
-  const [todayStudyMinutes, setTodayStudyMinutes] = useState(0);
+
+  const [studySummary, setStudySummary] = useState({
+    todayMinutes: 0,
+    totalHours: 0,
+    streakDays: 0,
+    totalPagesRead: 0,
+  });
 
   const loadStudyStats = () => {
     try {
       const due = flashcardRepo.getDueFlashcards();
       setDueCardsCount(due.length);
-      const secs = studyTimerRepo.getTodayStudySeconds();
-      setTodayStudyMinutes(Math.round(secs / 60));
+      const summary = studyTimerRepo.getStudyTrackingSummary();
+      setStudySummary(summary);
     } catch {
       // Ignore initial stats load errors
     }
@@ -196,19 +214,179 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Top Dual Tab Switcher: Study Material vs Assessment */}
+      <View style={[styles.dualTabBar, { backgroundColor: colors.surfaceVariant }]}>
+        <Pressable
+          onPress={() => setActiveTopTab('study')}
+          style={[
+            styles.dualTabBtn,
+            activeTopTab === 'study' && [
+              styles.dualTabBtnActive,
+              { backgroundColor: colors.card, shadowColor: colors.shadow },
+            ],
+          ]}
+        >
+          <Ionicons
+            name="book"
+            size={16}
+            color={activeTopTab === 'study' ? colors.primary : colors.textSecondary}
+          />
+          <Text
+            style={[
+              TYPOGRAPHY.captionBold,
+              {
+                color: activeTopTab === 'study' ? colors.primary : colors.textSecondary,
+                marginLeft: 6,
+              },
+            ]}
+          >
+            Study Material
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setActiveTopTab('assessment')}
+          style={[
+            styles.dualTabBtn,
+            activeTopTab === 'assessment' && [
+              styles.dualTabBtnActive,
+              { backgroundColor: colors.card, shadowColor: colors.shadow },
+            ],
+          ]}
+        >
+          <Ionicons
+            name="school"
+            size={16}
+            color={activeTopTab === 'assessment' ? colors.primary : colors.textSecondary}
+          />
+          <Text
+            style={[
+              TYPOGRAPHY.captionBold,
+              {
+                color: activeTopTab === 'assessment' ? colors.primary : colors.textSecondary,
+                marginLeft: 6,
+              },
+            ]}
+          >
+            Assessment
+          </Text>
+        </Pressable>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Search Bar */}
-        <View style={styles.searchSection}>
-          <SearchBar
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search notes, subjects, PDFs..."
-          />
-        </View>
+        {activeTopTab === 'assessment' ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
+            <AssessmentView
+              exams={exams}
+              selectedExamId={selectedExamId}
+              onSelectExam={setSelectedExamId}
+              onOpenExamModal={() => {
+                setEditingExam(null);
+                setExamModalVisible(true);
+              }}
+            />
+          </View>
+        ) : (
+          <>
+            {/* Target Exam Filter Pills */}
+            <View style={styles.examFilterSection}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.examPillsContainer}
+              >
+                <Pressable
+                  onPress={() => setSelectedExamId(null)}
+                  style={[
+                    styles.examPill,
+                    {
+                      backgroundColor: selectedExamId === null ? colors.primary : colors.card,
+                      borderColor: selectedExamId === null ? colors.primary : colors.cardBorder,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      TYPOGRAPHY.captionBold,
+                      { color: selectedExamId === null ? '#FFFFFF' : colors.text },
+                    ]}
+                  >
+                    All Exams
+                  </Text>
+                </Pressable>
+
+                {exams.map((ex) => {
+                  const isSelected = selectedExamId === ex.id;
+                  return (
+                    <Pressable
+                      key={ex.id}
+                      onPress={() => setSelectedExamId(ex.id)}
+                      onLongPress={() => {
+                        setEditingExam(ex);
+                        setExamModalVisible(true);
+                      }}
+                      style={[
+                        styles.examPill,
+                        {
+                          backgroundColor: isSelected ? ex.color : colors.card,
+                          borderColor: isSelected ? ex.color : colors.cardBorder,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          TYPOGRAPHY.captionBold,
+                          { color: isSelected ? '#FFFFFF' : colors.text },
+                        ]}
+                      >
+                        {ex.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+
+                <Pressable
+                  onPress={() => {
+                    setEditingExam(null);
+                    setExamModalVisible(true);
+                  }}
+                  style={[
+                    styles.examPill,
+                    styles.addExamPill,
+                    { borderColor: colors.primary, backgroundColor: `${colors.primary}12` },
+                  ]}
+                >
+                  <Ionicons name="add" size={16} color={colors.primary} />
+                  <Text style={[TYPOGRAPHY.captionBold, { color: colors.primary, marginLeft: 2 }]}>
+                    New Exam
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            </View>
+
+            {/* Daily Study Progress & Streak Tracking Card */}
+            <View style={{ paddingHorizontal: 16 }}>
+              <StudyTrackerCard
+                todayMinutes={studySummary.todayMinutes}
+                streakDays={studySummary.streakDays}
+                totalPagesRead={studySummary.totalPagesRead}
+                completedPdfsCount={pdfs.filter((p) => p.is_completed === 1).length}
+                onOpenTimer={() => usePomodoroStore.getState().setModalVisible(true)}
+              />
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.searchSection}>
+              <SearchBar
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search notes, subjects, PDFs..."
+              />
+            </View>
 
         {/* If Search is Active */}
         {search.trim().length > 0 ? (
@@ -226,6 +404,7 @@ export default function HomeScreen() {
                   key={pdf.id}
                   pdf={pdf}
                   onToggleFavorite={toggleFavorite}
+                  onToggleCompleted={togglePdfCompleted}
                   onRename={setEditingPdf}
                   onMove={setMovingPdf}
                   onDelete={setDeletingPdf}
@@ -318,7 +497,7 @@ export default function HomeScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => setPomodoroVisible(true)}
+                onPress={() => usePomodoroStore.getState().setModalVisible(true)}
                 style={({ pressed }) => [
                   styles.studyHubCard,
                   {
@@ -334,7 +513,7 @@ export default function HomeScreen() {
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={[TYPOGRAPHY.bodyBold, { color: colors.text }]}>Focus Timer</Text>
                   <Text style={[TYPOGRAPHY.tiny, { color: colors.textSecondary }]}>
-                    {todayStudyMinutes > 0 ? `${todayStudyMinutes}m today` : '25m session'}
+                    {studySummary.todayMinutes > 0 ? `${studySummary.todayMinutes}m today` : 'Focus session'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -485,7 +664,7 @@ export default function HomeScreen() {
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-                {categories.map((cat) => (
+                {(selectedExamId ? categories.filter((c) => c.exam_id === selectedExamId) : categories).map((cat) => (
                   <View key={cat.id} style={{ width: 180, marginRight: 12 }}>
                     <CategoryCard
                       category={cat}
@@ -517,6 +696,7 @@ export default function HomeScreen() {
                     key={pdf.id}
                     pdf={pdf}
                     onToggleFavorite={toggleFavorite}
+                    onToggleCompleted={togglePdfCompleted}
                     onRename={setEditingPdf}
                     onMove={setMovingPdf}
                     onDelete={setDeletingPdf}
@@ -541,6 +721,7 @@ export default function HomeScreen() {
                     key={pdf.id}
                     pdf={pdf}
                     onToggleFavorite={toggleFavorite}
+                    onToggleCompleted={togglePdfCompleted}
                     onRename={setEditingPdf}
                     onMove={setMovingPdf}
                     onDelete={setDeletingPdf}
@@ -617,6 +798,7 @@ export default function HomeScreen() {
                     key={pdf.id}
                     pdf={pdf}
                     onToggleFavorite={toggleFavorite}
+                    onToggleCompleted={togglePdfCompleted}
                     onRename={setEditingPdf}
                     onMove={setMovingPdf}
                     onDelete={setDeletingPdf}
@@ -626,17 +808,39 @@ export default function HomeScreen() {
             </View>
           </>
         )}
+          </>
+        )}
       </ScrollView>
+
+      {/* Target Exam Create/Edit Modal */}
+      <ExamModal
+        visible={examModalVisible}
+        exam={editingExam}
+        onSave={(name, code, desc, icon, col) => {
+          if (editingExam) {
+            editExam(editingExam.id, name, code, desc, icon, col);
+          } else {
+            addExam(name, code, desc, icon, col);
+          }
+        }}
+        onDelete={(id) => removeExam(id)}
+        onClose={() => {
+          setExamModalVisible(false);
+          setEditingExam(null);
+        }}
+      />
 
       {/* Category Create/Edit Modal */}
       <CategoryModal
         visible={categoryModalVisible}
         category={editingCategory}
-        onSave={(name, desc, icon, col) => {
+        exams={exams}
+        initialExamId={selectedExamId}
+        onSave={(name, desc, icon, col, exId) => {
           if (editingCategory) {
-            editCategory(editingCategory.id, name, desc, icon, col);
+            editCategory(editingCategory.id, name, desc, icon, col, exId);
           } else {
-            addCategory(name, desc, icon, col);
+            addCategory(name, desc, icon, col, exId);
           }
         }}
         onClose={() => {
@@ -692,15 +896,6 @@ export default function HomeScreen() {
         }}
         onCancel={() => setDeletingCategory(null)}
       />
-
-      {/* Focus Pomodoro Timer Modal */}
-      <PomodoroWidget
-        visible={pomodoroVisible}
-        onClose={() => {
-          setPomodoroVisible(false);
-          loadStudyStats();
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -748,6 +943,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 38,
     borderRadius: 12,
+  },
+  dualTabBar: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 8,
+    borderRadius: 14,
+    padding: 3,
+  },
+  dualTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+  dualTabBtnActive: {
+    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  examFilterSection: {
+    paddingTop: 6,
+    marginBottom: 8,
+  },
+  examPillsContainer: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  examPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  addExamPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderStyle: 'dashed',
   },
   scrollContent: {
     paddingBottom: 32,
