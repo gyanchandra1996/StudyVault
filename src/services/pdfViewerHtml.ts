@@ -26,6 +26,50 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
       font-family: 'Devlys 010';
       src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
     }
+    @font-face {
+      font-family: 'DV-TTSurekh';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'DV-TTSurekhNormal';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'DV-TTSurekhBold';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'DV-Surekh';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'DV-TTSurekhEN';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Walkman-Chanakya';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Chanakya';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'APS-DV-Priyanka';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Shree-Dev-0714';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Lohit Devanagari';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
+    @font-face {
+      font-family: 'Arial Unicode MS';
+      src: local('Noto Sans Devanagari'), local('NotoSansDevanagari'), local('sans-serif');
+    }
     * {
       box-sizing: border-box;
       -webkit-tap-highlight-color: transparent;
@@ -36,7 +80,7 @@ export const VIEWER_HTML_CONTENT = `<!DOCTYPE html>
       width: 100%;
       height: 100%;
       background-color: #F8FAFC;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Devanagari", "Mangal", "Nirmala UI", Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Devanagari", "DV-TTSurekh", "DV-Surekh", "Mangal", "Nirmala UI", Helvetica, Arial, sans-serif;
       overflow-x: auto;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
