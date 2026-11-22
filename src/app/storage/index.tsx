@@ -14,7 +14,7 @@ export default function StorageScreen() {
 
   useEffect(() => {
     refreshStorageBreakdown();
-  }, []);
+  }, [refreshStorageBreakdown]);
 
   const totalBytes =
     (storageStats?.totalPdfBytes ?? 0) + (storageStats?.recycledPdfBytes ?? 0);

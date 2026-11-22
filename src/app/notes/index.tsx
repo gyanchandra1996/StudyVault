@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,14 +28,14 @@ export default function NotesScreen() {
   const [editText, setEditText] = useState('');
   const [deletingNote, setDeletingNote] = useState<PersonalNote | null>(null);
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     const list = noteRepo.getAllNotes(search);
     setNotes(list);
-  };
+  }, [search]);
 
   useEffect(() => {
     loadData();
-  }, [search]);
+  }, [loadData]);
 
   const handleSaveEdit = () => {
     if (editingNote && editText.trim()) {

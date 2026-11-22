@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -42,7 +42,7 @@ export function AssessmentView({
   const [showQuizRunner, setShowQuizRunner] = useState(false);
   const [activeAttemptId, setActiveAttemptId] = useState<number | null>(null);
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     try {
       const qList = quizRepo.getAllQuestions(selectedExamId);
       const aList = quizRepo.getAllQuizAttempts(selectedExamId);
@@ -53,11 +53,11 @@ export function AssessmentView({
     } catch (e) {
       console.warn('Error loading assessment data:', e);
     }
-  };
+  }, [selectedExamId]);
 
   useEffect(() => {
     loadData();
-  }, [selectedExamId]);
+  }, [loadData]);
 
   const handleDeleteQuestion = (id: number) => {
     Alert.alert('Delete Question', 'Are you sure you want to remove this question from Question Bank?', [

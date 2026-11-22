@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -61,7 +61,7 @@ export default function CategoryDetailScreen() {
   const [movingPdf, setMovingPdf] = useState<PdfDocument | null>(null);
   const [deletingPdf, setDeletingPdf] = useState<PdfDocument | null>(null);
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     if (!categoryId) return;
     const cat = categoryRepo.getCategoryById(categoryId);
     setCategory(cat);
@@ -76,11 +76,11 @@ export default function CategoryDetailScreen() {
       sortOrder: 'desc',
     });
     setPdfs(docList);
-  };
+  }, [categoryId, selectedSubcategoryId, search]);
 
   useEffect(() => {
     loadData();
-  }, [categoryId, selectedSubcategoryId, search]);
+  }, [loadData]);
 
   const handleUpload = () => {
     Alert.alert(

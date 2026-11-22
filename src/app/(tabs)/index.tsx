@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -80,7 +80,7 @@ export default function HomeScreen() {
     totalPagesRead: 0,
   });
 
-  const loadStudyStats = () => {
+  const loadStudyStats = useCallback(() => {
     try {
       const due = flashcardRepo.getDueFlashcards();
       setDueCardsCount(due.length);
@@ -89,12 +89,12 @@ export default function HomeScreen() {
     } catch {
       // Ignore initial stats load errors
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadAll();
     loadStudyStats();
-  }, []);
+  }, [loadAll, loadStudyStats]);
 
   const onRefresh = async () => {
     setRefreshing(true);
